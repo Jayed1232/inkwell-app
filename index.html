@@ -799,7 +799,7 @@ function renderCommunityUI() {
 
         <div>
           <label class="small-label">Pen Name</label>
-          <input id="u-author" class="input-field" placeholder="Anonymous" maxlength="60" value="${savedName}">
+          <input id="u-author" class="input-field" placeholder="Your pen name (required)" maxlength="60" value="${savedName}">
         </div>
         <div>
           <label class="small-label">Story Title</label>
@@ -868,9 +868,10 @@ function fillFromLibrary() {
 
 async function publishStory() {
   if (!db) { showToast('Firebase unavailable','error'); return; }
-  const author = (document.getElementById('u-author').value.trim())||'Anonymous';
+  const author = document.getElementById('u-author').value.trim();
   const title  = document.getElementById('u-title').value.trim();
   const content= document.getElementById('u-content').value.trim();
+  if (!author) { showToast('Please enter a pen name','error'); document.getElementById('u-author').focus(); document.getElementById('u-author').style.borderColor='var(--accent3)'; setTimeout(()=>document.getElementById('u-author').style.borderColor='',1500); return; }
   if (!title) { showToast('Please add a title','error'); document.getElementById('u-title').focus(); return; }
   if (!content) { showToast('Please add some content','error'); document.getElementById('u-content').focus(); return; }
   if (content.length > 60000) { showToast('Story too long (max 60,000 chars)','error'); return; }
