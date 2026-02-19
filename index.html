@@ -55,6 +55,8 @@
     .home-nav-btn:hover { border-color: var(--border-hover); color: var(--text); }
     .home-nav-btn.nav-community { border-color: rgba(124,106,245,0.3); color: var(--accent2); }
     .home-nav-btn.nav-community:hover { background: rgba(124,106,245,0.08); border-color: var(--accent2); box-shadow: 0 4px 20px rgba(124,106,245,0.15); }
+    .home-nav-btn.nav-publish { border-color: rgba(200,169,110,0.3); color: var(--accent); }
+    .home-nav-btn.nav-publish:hover { background: rgba(200,169,110,0.08); border-color: var(--accent); box-shadow: 0 4px 20px rgba(200,169,110,0.15); }
 
     .stories-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px; width: 100%; max-width: 960px; margin-bottom: 40px; }
     .story-card {
@@ -292,7 +294,8 @@
     <div class="logo-sub">Your story universe</div>
   </div>
   <div class="home-nav">
-    <button class="home-nav-btn nav-community" onclick="openCommunity()">🌍 Community Stories</button>
+    <button class="home-nav-btn nav-community" onclick="openCommunity('read')">📖 Read Stories</button>
+    <button class="home-nav-btn nav-publish" onclick="openCommunity('publish')">✦ Publish a Story</button>
   </div>
   <div id="stories-container" style="width:100%;max-width:960px;display:flex;flex-direction:column;align-items:center;"></div>
 </div>
@@ -728,7 +731,8 @@ document.addEventListener('keydown', e=>{ if((e.ctrlKey||e.metaKey)&&e.key==='s'
 // ============================================================
 // COMMUNITY
 // ============================================================
-async function openCommunity() {
+async function openCommunity(tab) {
+  tab = tab || 'read';
   const page = document.getElementById('community-page');
   page.classList.add('active');
   if (!navigator.onLine) { renderOfflineWall(); return; }
@@ -739,6 +743,8 @@ async function openCommunity() {
     while (!firebaseReady && tries < 20) { await new Promise(r=>setTimeout(r,300)); tries++; }
   }
   renderCommunityUI();
+  // Switch to requested tab after render
+  setTimeout(() => switchCommunityTab(tab), 50);
 }
 function closeCommunity() {
   document.getElementById('community-page').classList.remove('active');
@@ -762,49 +768,90 @@ function renderCommunityUI() {
   const savedName = escHtml(localStorage.getItem('inkwell_penname')||'');
 
   document.getElementById('community-body').innerHTML = `
-    <!-- UPLOAD PANEL -->
-    <div class="upload-panel">
-      <div class="panel-eyebrow">Share Your Work</div>
-      <div class="panel-heading">Publish a Story</div>
-      <div class="panel-sub">Share your writing with the Inkwell community. All stories are publicly visible.</div>
+    <div style="flex:1;display:flex;flex-direction:column;overflow:hidden;width:100%;">
 
-      <div>
-        <label class="small-label">Pen Name</label>
-        <input id="u-author" class="input-field" placeholder="Anonymous" maxlength="60" value="${savedName}">
-      </div>
-      <div>
-        <label class="small-label">Story Title</label>
-        <input id="u-title" class="input-field" placeholder="Give your story a title…" maxlength="120">
+      <!-- TAB BUTTONS -->
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);flex-shrink:0;background:var(--surface);">
+        <button id="tab-read-btn" onclick="switchCommunityTab('read')" style="flex:1;padding:14px;background:rgba(124,106,245,0.1);border:none;border-bottom:2px solid var(--accent2);color:var(--accent2);font-family:'DM Sans',sans-serif;font-weight:600;font-size:14px;cursor:pointer;transition:all 0.2s;">
+          📖 Read Stories
+        </button>
+        <button id="tab-publish-btn" onclick="switchCommunityTab('publish')" style="flex:1;padding:14px;background:transparent;border:none;border-bottom:2px solid transparent;color:var(--text-muted);font-family:'DM Sans',sans-serif;font-weight:600;font-size:14px;cursor:pointer;transition:all 0.2s;">
+          ✦ Publish
+        </button>
       </div>
 
-      ${storiesOptions ? `<div>
-        <label class="small-label">Or pick from your library</label>
-        <select id="u-select" class="input-field from-library-select" onchange="fillFromLibrary()">
-          <option value="">— Select a story —</option>
-          ${storiesOptions}
-        </select>
-      </div>` : ''}
-
-      <div>
-        <label class="small-label">Content</label>
-        <textarea id="u-content" class="input-field upload-textarea" placeholder="Write or paste your story here…"></textarea>
+      <!-- READ TAB -->
+      <div id="tab-read" style="flex:1;overflow-y:auto;padding:24px;display:flex;flex-direction:column;gap:0;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px;flex-shrink:0;">
+          <div style="font-family:'Playfair Display',serif;font-size:1.4rem;font-weight:900;">Community Stories</div>
+          <div style="font-family:'Space Mono',monospace;font-size:10px;color:var(--text-dim);" id="feed-meta"></div>
+        </div>
+        <div class="feed-list" id="feed-list">
+          <div class="feed-empty"><div class="feed-empty-icon">⏳</div><div style="font-size:14px;">Loading stories…</div></div>
+        </div>
       </div>
 
-      <button class="publish-btn" id="pub-btn" onclick="publishStory()">✦ Publish to Community</button>
-    </div>
+      <!-- PUBLISH TAB -->
+      <div id="tab-publish" style="flex:1;overflow-y:auto;padding:24px;display:none;flex-direction:column;gap:16px;">
+        <div class="panel-eyebrow">Share Your Work</div>
+        <div class="panel-heading">Publish a Story</div>
+        <div class="panel-sub">Share your writing with the Inkwell community. All stories are publicly visible.</div>
 
-    <!-- FEED -->
-    <div class="feed-panel">
-      <div class="feed-top">
-        <div class="feed-title">Community Stories</div>
-        <div class="feed-meta" id="feed-meta"></div>
+        <div>
+          <label class="small-label">Pen Name</label>
+          <input id="u-author" class="input-field" placeholder="Anonymous" maxlength="60" value="${savedName}">
+        </div>
+        <div>
+          <label class="small-label">Story Title</label>
+          <input id="u-title" class="input-field" placeholder="Give your story a title…" maxlength="120">
+        </div>
+
+        ${storiesOptions ? `<div>
+          <label class="small-label">Or pick from your library</label>
+          <select id="u-select" class="input-field" onchange="fillFromLibrary()">
+            <option value="">— Select a story —</option>
+            ${storiesOptions}
+          </select>
+        </div>` : ''}
+
+        <div>
+          <label class="small-label">Content</label>
+          <textarea id="u-content" class="input-field upload-textarea" placeholder="Write or paste your story here…"></textarea>
+        </div>
+
+        <button class="publish-btn" id="pub-btn" onclick="publishStory()">✦ Publish to Community</button>
       </div>
-      <div class="feed-list" id="feed-list">
-        <div class="feed-empty"><div class="feed-empty-icon">⏳</div><div style="font-size:14px;">Loading stories…</div></div>
-      </div>
+
     </div>`;
 
   startFeedListener();
+}
+
+function switchCommunityTab(tab) {
+  const readTab = document.getElementById('tab-read');
+  const publishTab = document.getElementById('tab-publish');
+  const readBtn = document.getElementById('tab-read-btn');
+  const publishBtn = document.getElementById('tab-publish-btn');
+
+  if (tab === 'read') {
+    readTab.style.display = 'flex';
+    publishTab.style.display = 'none';
+    readBtn.style.background = 'rgba(124,106,245,0.1)';
+    readBtn.style.borderBottom = '2px solid var(--accent2)';
+    readBtn.style.color = 'var(--accent2)';
+    publishBtn.style.background = 'transparent';
+    publishBtn.style.borderBottom = '2px solid transparent';
+    publishBtn.style.color = 'var(--text-muted)';
+  } else {
+    readTab.style.display = 'none';
+    publishTab.style.display = 'flex';
+    publishBtn.style.background = 'rgba(200,169,110,0.1)';
+    publishBtn.style.borderBottom = '2px solid var(--accent)';
+    publishBtn.style.color = 'var(--accent)';
+    readBtn.style.background = 'transparent';
+    readBtn.style.borderBottom = '2px solid transparent';
+    readBtn.style.color = 'var(--text-muted)';
+  }
 }
 
 function fillFromLibrary() {
